@@ -6,7 +6,7 @@ const apiKey = process.env.GEMINI_API_KEY;
 
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
-export async function generateAIResponse(prompt: string, history: { role: string; parts: [{ text: string }] }[]) {
+export async function generateAIResponse(prompt: string, history: { role: string; parts: { text: string }[] }[]) {
   if (!genAI) {
     return { error: "Gemini API key is not configured on the server. Please add GEMINI_API_KEY to your .env file." };
   }
