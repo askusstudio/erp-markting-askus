@@ -12,6 +12,7 @@ import {
   Settings,
   Activity,
   LogOut,
+  Bot,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 const navigation = [
@@ -21,6 +22,7 @@ const navigation = [
   { name: "Recurring", href: "/recurring", icon: Repeat },
   { name: "Packages", href: "/packages", icon: Package },
   { name: "Reports", href: "/reports", icon: BarChart3 },
+  { name: "AI Chat", href: "/ai-chat", icon: Bot },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 export default function Sidebar() {
