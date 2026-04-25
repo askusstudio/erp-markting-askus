@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { generateAIResponse } from "@/app/actions/ai";
-import { Send, Bot, User, Loader2, Sparkles, Paperclip, Mic, FileText, LayoutTemplate, PenTool, Image as ImageIcon, Plus } from "lucide-react";
+import { Send, Bot, User, Loader2, Sparkles, Paperclip, Mic, FileText, LayoutTemplate, PenTool, Image as ImageIcon, Plus, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import clsx from "clsx";
@@ -10,6 +10,10 @@ import clsx from "clsx";
 type Message = {
   role: "user" | "model";
   text: string;
+  attachment?: {
+    name: string;
+    type: string;
+  };
 };
 
 const suggestions = [
@@ -23,7 +27,31 @@ export default function AIChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [attachment, setAttachment] = useState<{ file: File, preview: string, type: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/') && !file.type.startsWith('text/') && file.type !== 'application/pdf') {
+      alert("Only images, text files, and PDFs are supported.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      setAttachment({
+        file,
+        preview: result,
+        type: file.type
+      });
+    };
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -35,13 +63,29 @@ export default function AIChatPage() {
 
   const handleSubmit = async (e?: React.FormEvent | React.KeyboardEvent) => {
     e?.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && !attachment) || isLoading) return;
 
     const userMessage = input.trim();
     setInput("");
 
+    let attachmentData = undefined;
+    if (attachment) {
+      const base64Data = attachment.preview.split(',')[1];
+      attachmentData = {
+        inlineData: {
+          data: base64Data,
+          mimeType: attachment.type
+        }
+      };
+    }
+
     // Add user message to UI
-    const newMessages: Message[] = [...messages, { role: "user", text: userMessage }];
+    const newMessages: Message[] = [...messages, {
+      role: "user",
+      text: userMessage,
+      attachment: attachment ? { name: attachment.file.name, type: attachment.type } : undefined
+    }];
+    setAttachment(null);
     setMessages(newMessages);
     setIsLoading(true);
 
@@ -52,7 +96,7 @@ export default function AIChatPage() {
     }));
 
     // Call server action
-    const response = await generateAIResponse(userMessage, history);
+    const response = await generateAIResponse(userMessage || "Describe this attachment.", history, attachmentData);
 
     if (response.error) {
       setMessages((prev) => [...prev, { role: "model", text: `Error: ${response.error}` }]);
@@ -131,7 +175,15 @@ export default function AIChatPage() {
                     )}
                   >
                     {message.role === "user" ? (
-                      <div className="whitespace-pre-wrap">{message.text}</div>
+                      <div className="whitespace-pre-wrap">
+                        {message.attachment && (
+                          <div className="flex items-center gap-2 mb-2 bg-violet-400/20 px-3 py-1.5 rounded-lg border border-violet-400/30 w-fit">
+                            <FileText className="h-4 w-4" />
+                            <span className="text-sm font-medium">{message.attachment.name}</span>
+                          </div>
+                        )}
+                        {message.text}
+                      </div>
                     ) : (
                       <div className="prose prose-sm prose-slate max-w-none prose-p:leading-relaxed prose-pre:bg-slate-50 prose-pre:text-slate-800 prose-pre:border prose-pre:border-slate-200">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -167,6 +219,29 @@ export default function AIChatPage() {
             onSubmit={handleSubmit}
             className="bg-white rounded-2xl border border-violet-200 shadow-[0_8px_30px_rgba(139,92,246,0.12)] overflow-hidden focus-within:border-violet-400 focus-within:ring-1 focus-within:ring-violet-400 transition-all"
           >
+            {attachment && (
+              <div className="px-4 pt-3 pb-1 border-b border-slate-100 flex items-center gap-3">
+                <div className="relative group">
+                  {attachment.type.startsWith('image/') ? (
+                    <img src={attachment.preview} alt="preview" className="h-12 w-12 object-cover rounded-lg border border-slate-200" />
+                  ) : (
+                    <div className="h-12 w-12 flex items-center justify-center bg-slate-100 rounded-lg border border-slate-200 text-slate-500">
+                      <FileText className="h-6 w-6" />
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAttachment(null)}
+                    className="absolute -top-2 -right-2 h-5 w-5 bg-white text-slate-400 hover:text-rose-500 hover:bg-rose-50 border border-slate-200 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+                <div className="text-sm font-medium text-slate-600 truncate max-w-[200px]">
+                  {attachment.file.name}
+                </div>
+              </div>
+            )}
             <div className="relative flex items-center px-4 py-3">
               <input
                 type="text"
@@ -184,7 +259,7 @@ export default function AIChatPage() {
               />
               <button
                 type="submit"
-                disabled={!input.trim() || isLoading}
+                disabled={(!input.trim() && !attachment) || isLoading}
                 className="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:text-violet-500 hover:bg-violet-50 transition-colors disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-slate-400"
               >
                 <Send className="h-5 w-5" />
@@ -194,18 +269,29 @@ export default function AIChatPage() {
             {/* Bottom Toolbar */}
             <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/50 border-t border-slate-100/80">
               <div className="flex items-center gap-4 text-xs font-medium text-slate-500">
-                <button type="button" className="flex items-center gap-1.5 hover:text-slate-800 transition-colors">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
+                  accept="image/*,text/*,application/pdf"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 hover:text-slate-800 transition-colors"
+                >
                   <Paperclip className="h-4 w-4" />
                   <span>Attach</span>
                 </button>
-                <button type="button" className="flex items-center gap-1.5 hover:text-slate-800 transition-colors">
+                {/* <button type="button" className="flex items-center gap-1.5 hover:text-slate-800 transition-colors">
                   <Mic className="h-4 w-4" />
                   <span>Voice Message</span>
                 </button>
                 <button type="button" className="flex items-center gap-1.5 hover:text-slate-800 transition-colors">
                   <FileText className="h-4 w-4" />
                   <span>Browse Prompts</span>
-                </button>
+                </button> */}
               </div>
               <div className="text-xs text-slate-400">
                 {input.length} / 3,000

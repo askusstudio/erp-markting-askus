@@ -1,34 +1,102 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, MoreVertical, Building2, Mail, Phone, X } from "lucide-react";
-
-const initialClients = [
-  { id: 1, name: "Acme Corp", contact: "John Doe", email: "john@acme.com", phone: "+1 (555) 123-4567", status: "Active", totalBilled: "$12,400.00" },
-  { id: 2, name: "Globex Inc", contact: "Jane Smith", email: "jane@globex.com", phone: "+1 (555) 987-6543", status: "Active", totalBilled: "$8,250.00" },
-  { id: 3, name: "Wayne Enterprises", contact: "Bruce Wayne", email: "bruce@wayne.com", phone: "+1 (555) 555-0000", status: "Inactive", totalBilled: "$45,000.00" },
-];
+import { useState, useEffect } from "react";
+import { Plus, Building2, Mail, Phone, X, Loader2 } from "lucide-react";
+import ActionMenu from "@/components/ActionMenu";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/utils/supabase/client";
 
 export default function ClientsPage() {
-  const [clients, setClients] = useState(initialClients);
+  const router = useRouter();
+  const supabase = createClient();
+  const [clients, setClients] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newClient, setNewClient] = useState({ name: "", contact: "", email: "", phone: "" });
+  const [newClient, setNewClient] = useState({ name: "", contact: "", email: "", phone: "", address: "", website: "", industry: "", taxId: "", notes: "" });
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  const handleAddClient = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetchClients();
+  }, []);
+
+  const fetchClients = async () => {
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .order('created_at', { ascending: false });
+      
+    if (error) {
+      console.error("Error fetching clients:", error);
+    } else {
+      setClients(data || []);
+    }
+    setIsLoading(false);
+  };
+
+  const handleEdit = (client: any) => {
+    setNewClient({
+      name: client.name || "",
+      contact: client.contact || "",
+      email: client.email || "",
+      phone: client.phone || "",
+      address: client.address || "",
+      website: client.website || "",
+      industry: client.industry || "",
+      taxId: client.tax_id || "",
+      notes: client.notes || "",
+    });
+    setEditingId(client.id);
+    setIsModalOpen(true);
+  };
+
+  const handleAddClient = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newClient.name) return;
     
-    setClients([
-      {
-        id: Date.now(),
-        ...newClient,
-        status: "Active",
-        totalBilled: "$0.00",
-      },
-      ...clients,
-    ]);
+    const clientData = {
+      name: newClient.name,
+      contact: newClient.contact,
+      email: newClient.email,
+      phone: newClient.phone,
+      address: newClient.address,
+      website: newClient.website,
+      industry: newClient.industry,
+      tax_id: newClient.taxId,
+      notes: newClient.notes,
+    };
+
+    if (editingId) {
+      const { error } = await supabase
+        .from('clients')
+        .update(clientData)
+        .eq('id', editingId);
+        
+      if (!error) {
+        setClients(clients.map(c => c.id === editingId ? { ...c, ...clientData } : c));
+      }
+      setEditingId(null);
+    } else {
+      const { data, error } = await supabase
+        .from('clients')
+        .insert([{ ...clientData, status: 'Active' }])
+        .select()
+        .single();
+        
+      if (!error && data) {
+        setClients([data, ...clients]);
+      }
+    }
+    
     setIsModalOpen(false);
-    setNewClient({ name: "", contact: "", email: "", phone: "" });
+    setNewClient({ name: "", contact: "", email: "", phone: "", address: "", website: "", industry: "", taxId: "", notes: "" });
+  };
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase.from('clients').delete().eq('id', id);
+    if (!error) {
+      setClients(clients.filter(c => c.id !== id));
+    }
   };
 
   return (
@@ -59,8 +127,21 @@ export default function ClientsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
-              {clients.map((client) => (
-                <tr key={client.id} className="transition-colors hover:bg-[#fdfbf7]/50">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                    <div className="flex justify-center mb-2"><Loader2 className="h-6 w-6 animate-spin text-violet-500" /></div>
+                    Loading clients...
+                  </td>
+                </tr>
+              ) : clients.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
+                    No clients found. Add your first client to get started.
+                  </td>
+                </tr>
+              ) : clients.map((client) => (
+                <tr key={client.id} onClick={() => router.push(`/clients/${client.id}`)} className="transition-colors hover:bg-[#fdfbf7]/50 cursor-pointer">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100">
@@ -83,11 +164,12 @@ export default function ClientsPage() {
                       {client.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 font-medium text-slate-800">{client.totalBilled}</td>
+                  <td className="px-6 py-4 font-medium text-slate-800">{client.totalBilled || "$0.00"}</td>
                   <td className="px-6 py-4 text-right">
-                    <button className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-500">
-                      <MoreVertical className="h-5 w-5" />
-                    </button>
+                    <ActionMenu 
+                      onEdit={() => handleEdit(client)} 
+                      onDelete={() => handleDelete(client.id)} 
+                    />
                   </td>
                 </tr>
               ))}
@@ -98,9 +180,9 @@ export default function ClientsPage() {
 
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-slate-800">Add New Client</h2>
+              <h2 className="text-xl font-bold text-slate-800">{editingId ? "Edit Client" : "Add New Client"}</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
             </div>
             <form onSubmit={handleAddClient} className="space-y-4">
@@ -120,9 +202,31 @@ export default function ClientsPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
                 <input type="text" value={newClient.phone} onChange={e => setNewClient({...newClient, phone: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
+                <input type="text" value={newClient.address} onChange={e => setNewClient({...newClient, address: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Website</label>
+                  <input type="url" value={newClient.website} onChange={e => setNewClient({...newClient, website: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Industry</label>
+                  <input type="text" value={newClient.industry} onChange={e => setNewClient({...newClient, industry: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Tax ID / GST</label>
+                <input type="text" value={newClient.taxId} onChange={e => setNewClient({...newClient, taxId: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Internal Notes</label>
+                <textarea rows={2} value={newClient.notes} onChange={e => setNewClient({...newClient, notes: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none"></textarea>
+              </div>
               <div className="pt-4 flex justify-end gap-3">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="rounded-xl px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
-                <button type="submit" className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-600 transition-colors">Save Client</button>
+                <button type="submit" className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-600 transition-colors">{editingId ? "Save Changes" : "Save Client"}</button>
               </div>
             </form>
           </div>

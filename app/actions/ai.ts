@@ -6,7 +6,11 @@ const apiKey = process.env.GEMINI_API_KEY;
 
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
 
-export async function generateAIResponse(prompt: string, history: { role: string; parts: { text: string }[] }[]) {
+export async function generateAIResponse(
+  prompt: string, 
+  history: { role: string; parts: { text: string }[] }[],
+  attachment?: { inlineData: { data: string; mimeType: string } }
+) {
   if (!genAI) {
     return { error: "Gemini API key is not configured on the server. Please add GEMINI_API_KEY to your .env file." };
   }
@@ -22,7 +26,12 @@ export async function generateAIResponse(prompt: string, history: { role: string
       },
     });
 
-    const result = await chat.sendMessage(prompt);
+    const parts: any[] = [{ text: prompt }];
+    if (attachment) {
+      parts.push(attachment);
+    }
+
+    const result = await chat.sendMessage(parts);
     const response = await result.response;
     return { text: response.text() };
   } catch (error: any) {

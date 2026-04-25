@@ -7,63 +7,67 @@ import {
   AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
-const stats = [
-  {
-    name: "Total Revenue (MTD)",
-    value: "$45,231.89",
-    change: "+20.1%",
-    trend: "up",
-    icon: DollarSign,
-  },
-  {
-    name: "Pending Payments (12)",
-    value: "$12,450.00",
-    change: "+4.5%",
-    trend: "up",
-    icon: Clock,
-  },
-  {
-    name: "Paid Invoices",
-    value: "34",
-    change: "This month",
-    trend: "neutral",
-    icon: CheckCircle2,
-  },
-];
-const overdueInvoices = [
-  { id: "INV-2026-042", client: "Acme Corp", amount: "$3,200.00", days: 12 },
-  { id: "INV-2026-039", client: "Globex Inc", amount: "$1,500.00", days: 8 },
-  {
-    id: "INV-2026-035",
-    client: "Stark Industries",
-    amount: "$4,800.00",
-    days: 21,
-  },
-];
-const recentActivity = [
-  {
-    id: 1,
-    action: "Invoice Paid",
-    target: "INV-2026-051",
-    client: "Wayne Enterprises",
-    time: "2 hours ago",
-  },
-  {
-    id: 2,
-    action: "New Client Added",
-    target: "LexCorp",
-    client: "",
-    time: "5 hours ago",
-  },
-  {
-    id: 3,
-    action: "Invoice Sent",
-    target: "INV-2026-052",
-    client: "Cyberdyne Systems",
-    time: "1 day ago",
-  },
-];
-export default function DashboardPage() {
+import { createClient } from "@/utils/supabase/server";
+
+export default async function DashboardPage() {
+  const supabase = await createClient();
+  
+  const { data: invoices } = await supabase.from('invoices').select('*, clients(name)').order('created_at', { ascending: false });
+  const invoicesList = invoices || [];
+  
+  const { data: clients } = await supabase.from('clients').select('*').order('created_at', { ascending: false }).limit(5);
+  const clientsList = clients || [];
+
+  const totalRevenue = invoicesList.filter(i => i.status === 'Paid').reduce((sum, i) => sum + Number(i.total), 0);
+  const pendingPayments = invoicesList.filter(i => ['Draft', 'Sent'].includes(i.status)).reduce((sum, i) => sum + Number(i.total), 0);
+  const paidInvoicesCount = invoicesList.filter(i => i.status === 'Paid').length;
+  const pendingInvoicesCount = invoicesList.filter(i => ['Draft', 'Sent'].includes(i.status)).length;
+  
+  const now = new Date();
+  const overdueInvoices = invoicesList
+    .filter(i => i.status === 'Overdue' || (new Date(i.due_date) < now && i.status !== 'Paid' && i.status !== 'Draft'))
+    .map(i => {
+      const dueDate = new Date(i.due_date);
+      const daysLate = Math.floor((now.getTime() - dueDate.getTime()) / (1000 * 3600 * 24));
+      return {
+        id: i.invoice_number,
+        client: i.clients?.name || 'Unknown',
+        amount: `$${Number(i.total).toFixed(2)}`,
+        days: daysLate > 0 ? daysLate : 0
+      };
+    }).slice(0, 5);
+
+  const recentActivity: any[] = [];
+  
+  invoicesList.slice(0, 3).forEach((inv) => {
+    recentActivity.push({
+      id: `inv-${inv.id}`,
+      action: inv.status === 'Paid' ? 'Invoice Paid' : (inv.status === 'Sent' ? 'Invoice Sent' : 'Invoice Created'),
+      target: inv.invoice_number,
+      client: inv.clients?.name || 'Unknown',
+      time: new Date(inv.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      timestamp: new Date(inv.created_at).getTime()
+    });
+  });
+
+  clientsList.slice(0, 2).forEach(c => {
+    recentActivity.push({
+      id: `cli-${c.id}`,
+      action: 'New Client Added',
+      target: c.name,
+      client: '',
+      time: new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      timestamp: new Date(c.created_at).getTime()
+    });
+  });
+
+  recentActivity.sort((a, b) => b.timestamp - a.timestamp);
+
+  const stats = [
+    { name: "Total Revenue", value: `$${totalRevenue.toFixed(2)}`, change: "+0.0%", trend: "neutral", icon: DollarSign },
+    { name: `Pending Payments (${pendingInvoicesCount})`, value: `$${pendingPayments.toFixed(2)}`, change: "+0.0%", trend: "neutral", icon: Clock },
+    { name: "Paid Invoices", value: paidInvoicesCount.toString(), change: "All time", trend: "neutral", icon: CheckCircle2 },
+  ];
   return (
     <div className="space-y-8">
       {" "}

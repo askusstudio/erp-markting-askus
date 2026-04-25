@@ -1,14 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, MoreVertical, FileText, Download, Send, X } from "lucide-react";
-
-const initialInvoices = [
-  { id: "INV-2026-052", client: "Cyberdyne Systems", amount: "$4,500.00", date: "Apr 22, 2026", dueDate: "May 06, 2026", status: "Sent" },
-  { id: "INV-2026-051", client: "Wayne Enterprises", amount: "$12,000.00", date: "Apr 20, 2026", dueDate: "May 04, 2026", status: "Paid" },
-  { id: "INV-2026-050", client: "Acme Corp", amount: "$3,200.00", date: "Apr 15, 2026", dueDate: "Apr 29, 2026", status: "Overdue" },
-  { id: "INV-2026-049", client: "Globex Inc", amount: "$1,500.00", date: "Apr 10, 2026", dueDate: "Apr 24, 2026", status: "Draft" },
-];
+import { useState, useEffect } from "react";
+import { Plus, MoreVertical, FileText, X, Loader2 } from "lucide-react";
+import ActionMenu from "@/components/ActionMenu";
+import { createClient } from "@/utils/supabase/client";
 
 const statusStyles = {
   Paid: "bg-teal-50 text-teal-600 ring-1 ring-teal-500/20",
@@ -18,27 +13,144 @@ const statusStyles = {
 };
 
 export default function InvoicesPage() {
-  const [invoices, setInvoices] = useState(initialInvoices);
+  const supabase = createClient();
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newInvoice, setNewInvoice] = useState({ client: "", amount: "", dueDate: "" });
+  const [newInvoice, setNewInvoice] = useState({ client: "", amount: "", currency: "$", dueDate: "", clientName: "" });
+  const [clientMode, setClientMode] = useState<"select" | "create">("select");
+  const [statusFilter, setStatusFilter] = useState("All Statuses");
+  const [timeFilter, setTimeFilter] = useState("All Time");
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  const handleAddInvoice = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newInvoice.client || !newInvoice.amount) return;
-    
-    setInvoices([
-      {
-        id: `INV-2026-${Math.floor(100 + Math.random() * 900)}`,
-        client: newInvoice.client,
-        amount: `$${parseFloat(newInvoice.amount).toFixed(2)}`,
-        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        dueDate: newInvoice.dueDate || "Due on receipt",
-        status: "Draft",
-      },
-      ...invoices,
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    const [invoicesRes, clientsRes] = await Promise.all([
+      supabase.from('invoices').select('*, clients(name)').order('created_at', { ascending: false }),
+      supabase.from('clients').select('id, name').order('name')
     ]);
+    
+    if (!invoicesRes.error) {
+      setInvoices(invoicesRes.data.map(inv => ({
+        id: inv.id,
+        invoice_number: inv.invoice_number,
+        client_id: inv.client_id,
+        client: inv.clients?.name || "Unknown",
+        amount: `$${inv.total}`,
+        rawAmount: inv.total,
+        date: new Date(inv.issue_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        rawDate: inv.issue_date,
+        dueDate: new Date(inv.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        rawDueDate: inv.due_date,
+        status: inv.status
+      })));
+    }
+    
+    if (!clientsRes.error) {
+      setClients(clientsRes.data);
+    }
+    setIsLoading(false);
+  };
+
+  const currencies = [
+    { symbol: "$", label: "USD ($)" },
+    { symbol: "€", label: "EUR (€)" },
+    { symbol: "£", label: "GBP (£)" },
+    { symbol: "₹", label: "INR (₹)" }
+  ];
+
+  const filteredInvoices = invoices.filter(invoice => {
+    const matchesStatus = statusFilter === "All Statuses" || invoice.status === statusFilter;
+    
+    let matchesTime = true;
+    if (timeFilter !== "All Time") {
+      const invoiceDate = new Date(invoice.rawDate);
+      const now = new Date();
+      
+      if (timeFilter === "This Month") {
+        matchesTime = invoiceDate.getMonth() === now.getMonth() && invoiceDate.getFullYear() === now.getFullYear();
+      } else if (timeFilter === "Last Month") {
+        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        matchesTime = invoiceDate.getMonth() === lastMonth.getMonth() && invoiceDate.getFullYear() === lastMonth.getFullYear();
+      } else if (timeFilter === "This Year") {
+        matchesTime = invoiceDate.getFullYear() === now.getFullYear();
+      }
+    }
+    
+    return matchesStatus && matchesTime;
+  });
+
+  const handleEdit = (invoice: any) => {
+    setNewInvoice({
+      client: invoice.client_id,
+      clientName: invoice.client,
+      amount: invoice.rawAmount?.toString() || "",
+      currency: "$",
+      dueDate: invoice.rawDueDate || "",
+    });
+    setEditingId(invoice.id);
+    setClientMode("select");
+    setIsModalOpen(true);
+  };
+
+  const handleAddInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newInvoice.amount) return;
+
+    let clientId = newInvoice.client;
+
+    if (clientMode === "create" && newInvoice.clientName) {
+      const { data: newClientData, error: clientErr } = await supabase
+        .from('clients')
+        .insert([{ name: newInvoice.clientName, status: 'Active' }])
+        .select()
+        .single();
+        
+      if (!clientErr && newClientData) {
+        clientId = newClientData.id;
+        setClients([...clients, newClientData]);
+      } else {
+        console.error("Failed to create client:", clientErr);
+        return;
+      }
+    }
+
+    if (!clientId) return;
+
+    const invoiceData = {
+      client_id: clientId,
+      invoice_number: `INV-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
+      total: parseFloat(newInvoice.amount) || 0,
+      issue_date: new Date().toISOString().split('T')[0],
+      due_date: newInvoice.dueDate || new Date().toISOString().split('T')[0],
+      status: "Draft"
+    };
+
+    if (editingId) {
+      const { invoice_number, issue_date, ...updateData } = invoiceData;
+      const { error } = await supabase.from('invoices').update(updateData).eq('id', editingId);
+      if (!error) fetchData();
+      setEditingId(null);
+    } else {
+      const { error } = await supabase.from('invoices').insert([invoiceData]);
+      if (!error) fetchData();
+    }
+    
     setIsModalOpen(false);
-    setNewInvoice({ client: "", amount: "", dueDate: "" });
+    setNewInvoice({ client: "", clientName: "", amount: "", currency: "$", dueDate: "" });
+    setClientMode("select");
+  };
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase.from('invoices').delete().eq('id', id);
+    if (!error) {
+      setInvoices(invoices.filter(i => i.id !== id));
+    }
   };
 
   return (
@@ -59,12 +171,20 @@ export default function InvoicesPage() {
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <div className="flex gap-2">
-            <select className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-400">
+            <select 
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-400"
+            >
               <option>All Statuses</option> <option>Paid</option>
               <option>Sent</option> <option>Draft</option>
               <option>Overdue</option>
             </select>
-            <select className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-400">
+            <select 
+              value={timeFilter}
+              onChange={(e) => setTimeFilter(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 focus:border-violet-400 focus:outline-none focus:ring-1 focus:ring-violet-400"
+            >
               <option>All Time</option> <option>This Month</option>
               <option>Last Month</option> <option>This Year</option>
             </select>
@@ -83,14 +203,27 @@ export default function InvoicesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200">
-              {invoices.map((invoice) => (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                    <div className="flex justify-center mb-2"><Loader2 className="h-6 w-6 animate-spin text-violet-500" /></div>
+                    Loading invoices...
+                  </td>
+                </tr>
+              ) : filteredInvoices.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                    No invoices found.
+                  </td>
+                </tr>
+              ) : filteredInvoices.map((invoice) => (
                 <tr key={invoice.id} className="transition-colors hover:bg-[#fdfbf7]/50">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-50">
                         <FileText className="h-5 w-5 text-violet-500" />
                       </div>
-                      <span className="font-medium text-slate-800">{invoice.id}</span>
+                      <span className="font-medium text-slate-800">{invoice.invoice_number}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 font-medium text-slate-800">{invoice.client}</td>
@@ -106,17 +239,10 @@ export default function InvoicesPage() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-500" title="Download PDF">
-                        <Download className="h-4 w-4" />
-                      </button>
-                      {invoice.status === "Draft" && (
-                        <button className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-violet-500" title="Send Invoice">
-                          <Send className="h-4 w-4" />
-                        </button>
-                      )}
-                      <button className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-500">
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
+                      <ActionMenu 
+                        onEdit={() => handleEdit(invoice)} 
+                        onDelete={() => handleDelete(invoice.id)} 
+                      />
                     </div>
                   </td>
                 </tr>
@@ -130,25 +256,59 @@ export default function InvoicesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-slate-800">Create Invoice</h2>
+              <h2 className="text-xl font-bold text-slate-800">{editingId ? "Edit Invoice" : "Create Invoice"}</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
             </div>
             <form onSubmit={handleAddInvoice} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Client Name *</label>
-                <input required type="text" value={newInvoice.client} onChange={e => setNewInvoice({...newInvoice, client: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
+                {clientMode === "select" ? (
+                  <div className="flex gap-2">
+                    <select 
+                      required
+                      value={newInvoice.client} 
+                      onChange={e => setNewInvoice({...newInvoice, client: e.target.value})} 
+                      className="flex-1 rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none bg-white"
+                    >
+                      <option value="">Select a client...</option>
+                      {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                    <button type="button" onClick={() => { setClientMode("create"); setNewInvoice({...newInvoice, client: "", clientName: ""}); }} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors whitespace-nowrap">New Client</button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input 
+                      required 
+                      type="text" 
+                      placeholder="Enter new client name"
+                      value={newInvoice.clientName} 
+                      onChange={e => setNewInvoice({...newInvoice, clientName: e.target.value})} 
+                      className="flex-1 rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" 
+                    />
+                    <button type="button" onClick={() => { setClientMode("select"); setNewInvoice({...newInvoice, clientName: ""}); }} className="rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors">Cancel</button>
+                  </div>
+                )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Amount ($) *</label>
-                <input required type="number" step="0.01" value={newInvoice.amount} onChange={e => setNewInvoice({...newInvoice, amount: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
+                <label className="block text-sm font-medium text-slate-700 mb-1">Amount *</label>
+                <div className="flex gap-2">
+                  <select 
+                    value={newInvoice.currency}
+                    onChange={e => setNewInvoice({...newInvoice, currency: e.target.value})}
+                    className="w-24 rounded-xl border border-slate-200 px-3 py-2 text-sm focus:border-violet-400 focus:outline-none bg-white"
+                  >
+                    {currencies.map(c => <option key={c.symbol} value={c.symbol}>{c.label}</option>)}
+                  </select>
+                  <input required type="number" step="0.01" placeholder="0.00" value={newInvoice.amount} onChange={e => setNewInvoice({...newInvoice, amount: e.target.value})} className="flex-1 rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Due Date</label>
-                <input type="text" placeholder="e.g. May 30, 2026" value={newInvoice.dueDate} onChange={e => setNewInvoice({...newInvoice, dueDate: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
+                <input type="date" value={newInvoice.dueDate} onChange={e => setNewInvoice({...newInvoice, dueDate: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none text-slate-600 bg-white" />
               </div>
               <div className="pt-4 flex justify-end gap-3">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="rounded-xl px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
-                <button type="submit" className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-600 transition-colors">Create Invoice</button>
+                <button type="submit" className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-600 transition-colors">{editingId ? "Save Changes" : "Create Invoice"}</button>
               </div>
             </form>
           </div>

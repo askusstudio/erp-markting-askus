@@ -1,38 +1,110 @@
 "use client";
 
-import { useState } from "react";
-import { Repeat, Plus, Search, MoreHorizontal, CheckCircle2, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Repeat, Plus, Search, MoreHorizontal, CheckCircle2, X, Loader2 } from "lucide-react";
+import ActionMenu from "@/components/ActionMenu";
 import clsx from "clsx";
-
-const initialRetainers = [
-  { id: 1, client: "Acme Corp", package: "SEO Foundation", amount: "$500.00", cadence: "Monthly", nextInvoice: "May 1, 2026", status: "active" },
-  { id: 2, client: "Globex Inc", package: "Google Ads Growth", amount: "$1,200.00", cadence: "Monthly", nextInvoice: "May 5, 2026", status: "active" },
-  { id: 3, client: "Soylent Corp", package: "SMM Bundle", amount: "$800.00", cadence: "Monthly", nextInvoice: "May 15, 2026", status: "paused" },
-];
+import { createClient } from "@/utils/supabase/client";
 
 export default function RecurringPage() {
-  const [retainers, setRetainers] = useState(initialRetainers);
+  const supabase = createClient();
+  const [retainers, setRetainers] = useState<any[]>([]);
+  const [clients, setClients] = useState<any[]>([]);
+  const [packages, setPackages] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newRetainer, setNewRetainer] = useState({ client: "", package: "", amount: "", cadence: "Monthly" });
+  const [newRetainer, setNewRetainer] = useState({ client_id: "", package_id: "", amount: "", cadence: "Monthly" });
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  const handleAddRetainer = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newRetainer.client || !newRetainer.package || !newRetainer.amount) return;
-    
-    setRetainers([
-      {
-        id: Date.now(),
-        client: newRetainer.client,
-        package: newRetainer.package,
-        amount: `$${parseFloat(newRetainer.amount).toFixed(2)}`,
-        cadence: newRetainer.cadence,
-        nextInvoice: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-        status: "active",
-      },
-      ...retainers,
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    const [retainersRes, clientsRes, packagesRes] = await Promise.all([
+      supabase.from('retainers').select('*, clients(name), service_packages(name)').order('created_at', { ascending: false }),
+      supabase.from('clients').select('id, name').order('name'),
+      supabase.from('service_packages').select('id, name, default_price').order('name')
     ]);
+    
+    if (!retainersRes.error) {
+      setRetainers(retainersRes.data.map(r => ({
+        id: r.id,
+        client_id: r.client_id,
+        client: r.clients?.name || "Unknown",
+        package_id: r.package_id,
+        package: r.service_packages?.name || "Custom",
+        amount: `$${r.amount}`,
+        rawAmount: r.amount,
+        cadence: r.cadence,
+        nextInvoice: r.next_invoice_date ? new Date(r.next_invoice_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : "Not set",
+        rawNextInvoice: r.next_invoice_date,
+        status: r.status
+      })));
+    }
+    
+    if (!clientsRes.error) setClients(clientsRes.data);
+    if (!packagesRes.error) setPackages(packagesRes.data);
+    
+    setIsLoading(false);
+  };
+
+  const handleEdit = (retainer: any) => {
+    setNewRetainer({
+      client_id: retainer.client_id,
+      package_id: retainer.package_id || "",
+      amount: retainer.rawAmount?.toString() || "",
+      cadence: retainer.cadence,
+    });
+    setEditingId(retainer.id);
+    setIsModalOpen(true);
+  };
+
+  const handlePackageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const pkgId = e.target.value;
+    const pkg = packages.find(p => p.id === pkgId);
+    setNewRetainer({
+      ...newRetainer,
+      package_id: pkgId,
+      amount: pkg ? pkg.default_price.toString() : newRetainer.amount
+    });
+  };
+
+  const handleAddRetainer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newRetainer.client_id || !newRetainer.amount) return;
+    
+    const nextDate = new Date();
+    nextDate.setMonth(nextDate.getMonth() + 1);
+    
+    const retainerData = {
+      client_id: newRetainer.client_id,
+      package_id: newRetainer.package_id || null,
+      amount: parseFloat(newRetainer.amount) || 0,
+      cadence: newRetainer.cadence,
+      next_invoice_date: editingId ? undefined : nextDate.toISOString().split('T')[0],
+      status: "active"
+    };
+    
+    if (editingId) {
+      const { error } = await supabase.from('retainers').update(retainerData).eq('id', editingId);
+      if (!error) fetchData();
+      setEditingId(null);
+    } else {
+      const { error } = await supabase.from('retainers').insert([retainerData]);
+      if (!error) fetchData();
+    }
+    
     setIsModalOpen(false);
-    setNewRetainer({ client: "", package: "", amount: "", cadence: "Monthly" });
+    setNewRetainer({ client_id: "", package_id: "", amount: "", cadence: "Monthly" });
+  };
+
+  const handleDelete = async (id: string) => {
+    const { error } = await supabase.from('retainers').delete().eq('id', id);
+    if (!error) {
+      setRetainers(retainers.filter(r => r.id !== id));
+    }
   };
 
   return (
@@ -78,7 +150,20 @@ export default function RecurringPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {retainers.map((plan) => (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                    <div className="flex justify-center mb-2"><Loader2 className="h-6 w-6 animate-spin text-violet-500" /></div>
+                    Loading retainers...
+                  </td>
+                </tr>
+              ) : retainers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+                    No retainers found.
+                  </td>
+                </tr>
+              ) : retainers.map((plan) => (
                 <tr key={plan.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 font-medium text-slate-800">{plan.client}</td>
                   <td className="px-6 py-4 text-slate-600">{plan.package}</td>
@@ -99,9 +184,11 @@ export default function RecurringPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button className="text-slate-400 hover:text-slate-600">
-                      <MoreHorizontal className="h-5 w-5" />
-                    </button>
+                    <ActionMenu 
+                      icon={MoreHorizontal}
+                      onEdit={() => handleEdit(plan)} 
+                      onDelete={() => handleDelete(plan.id)} 
+                    />
                   </td>
                 </tr>
               ))}
@@ -114,17 +201,23 @@ export default function RecurringPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-slate-800">New Retainer</h2>
+              <h2 className="text-xl font-bold text-slate-800">{editingId ? "Edit Retainer" : "New Retainer"}</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="h-5 w-5" /></button>
             </div>
             <form onSubmit={handleAddRetainer} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Client Name *</label>
-                <input required type="text" value={newRetainer.client} onChange={e => setNewRetainer({...newRetainer, client: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
+                <label className="block text-sm font-medium text-slate-700 mb-1">Client *</label>
+                <select required value={newRetainer.client_id} onChange={e => setNewRetainer({...newRetainer, client_id: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none bg-white">
+                  <option value="">Select a client...</option>
+                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Service Package *</label>
-                <input required type="text" value={newRetainer.package} onChange={e => setNewRetainer({...newRetainer, package: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
+                <label className="block text-sm font-medium text-slate-700 mb-1">Service Package (Optional)</label>
+                <select value={newRetainer.package_id} onChange={handlePackageChange} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none bg-white">
+                  <option value="">Custom Package</option>
+                  {packages.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Amount ($) *</label>
@@ -140,7 +233,7 @@ export default function RecurringPage() {
               </div>
               <div className="pt-4 flex justify-end gap-3">
                 <button type="button" onClick={() => setIsModalOpen(false)} className="rounded-xl px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
-                <button type="submit" className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-600 transition-colors">Save Retainer</button>
+                <button type="submit" className="rounded-xl bg-violet-500 px-4 py-2 text-sm font-medium text-white hover:bg-violet-600 transition-colors">{editingId ? "Save Changes" : "Save Retainer"}</button>
               </div>
             </form>
           </div>
