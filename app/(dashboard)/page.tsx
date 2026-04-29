@@ -32,7 +32,7 @@ export default async function DashboardPage() {
       return {
         id: i.invoice_number,
         client: i.clients?.name || 'Unknown',
-        amount: `$${Number(i.total).toFixed(2)}`,
+        amount: `₹${Number(i.total).toFixed(2)}`,
         days: daysLate > 0 ? daysLate : 0
       };
     }).slice(0, 5);
@@ -64,8 +64,8 @@ export default async function DashboardPage() {
   recentActivity.sort((a, b) => b.timestamp - a.timestamp);
 
   const stats = [
-    { name: "Total Revenue", value: `$${totalRevenue.toFixed(2)}`, change: "+0.0%", trend: "neutral", icon: DollarSign },
-    { name: `Pending Payments (${pendingInvoicesCount})`, value: `$${pendingPayments.toFixed(2)}`, change: "+0.0%", trend: "neutral", icon: Clock },
+    { name: "Total Revenue", value: `₹${totalRevenue.toFixed(2)}`, change: "+0.0%", trend: "neutral", icon: DollarSign },
+    { name: `Pending Payments (${pendingInvoicesCount})`, value: `₹${pendingPayments.toFixed(2)}`, change: "+0.0%", trend: "neutral", icon: Clock },
     { name: "Paid Invoices", value: paidInvoicesCount.toString(), change: "All time", trend: "neutral", icon: CheckCircle2 },
   ];
   return (

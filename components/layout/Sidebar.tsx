@@ -13,12 +13,16 @@ import {
   Activity,
   LogOut,
   Bot,
+  Briefcase,
+  Wallet
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Invoices", href: "/invoices", icon: FileText },
   { name: "Clients", href: "/clients", icon: Users },
+  { name: "Employees", href: "/employees", icon: Briefcase },
+  { name: "Payroll", href: "/payroll", icon: Wallet },
   { name: "Recurring", href: "/recurring", icon: Repeat },
   { name: "Packages", href: "/packages", icon: Package },
   { name: "Reports", href: "/reports", icon: BarChart3 },

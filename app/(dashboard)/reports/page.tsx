@@ -30,8 +30,8 @@ export default function ReportsPage() {
   const paidCount = invoices.filter(i => i.status === 'Paid').length;
 
   const stats = [
-    { name: "Total Revenue", value: `$${totalRevenue.toFixed(2)}`, change: "All time", trend: "neutral" },
-    { name: "Outstanding", value: `$${outstanding.toFixed(2)}`, change: "Pending", trend: "neutral" },
+    { name: "Total Revenue", value: `₹${totalRevenue.toFixed(2)}`, change: "All time", trend: "neutral" },
+    { name: "Outstanding", value: `₹${outstanding.toFixed(2)}`, change: "Pending", trend: "neutral" },
     { name: "Paid Invoices", value: paidCount.toString(), change: "All time", trend: "neutral" },
   ];
 
@@ -69,7 +69,7 @@ export default function ReportsPage() {
   });
   
   const topClients = Object.entries(clientRevenue)
-    .map(([name, amount]) => ({ name, amount: `$${amount.toFixed(2)}`, raw: amount }))
+    .map(([name, amount]) => ({ name, amount: `₹${amount.toFixed(2)}`, raw: amount }))
     .sort((a, b) => b.raw - a.raw)
     .slice(0, 5);
 

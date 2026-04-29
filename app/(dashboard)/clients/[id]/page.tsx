@@ -4,8 +4,8 @@ import { createClient } from "@/utils/supabase/server";
 import { notFound } from "next/navigation";
 
 const dummyHistory = [
-  { id: 1, type: "Invoice", title: "Invoice INV-2026-050 created", date: "Apr 15, 2026", amount: "$3,200.00" },
-  { id: 2, type: "Payment", title: "Payment received for INV-2026-048", date: "Apr 02, 2026", amount: "$4,500.00" },
+  { id: 1, type: "Invoice", title: "Invoice INV-2026-050 created", date: "Apr 15, 2026", amount: "₹3,200.00" },
+  { id: 2, type: "Payment", title: "Payment received for INV-2026-048", date: "Apr 02, 2026", amount: "₹4,500.00" },
   { id: 3, type: "Retainer", title: "SEO Foundation retainer renewed", date: "Apr 01, 2026", amount: null },
   { id: 4, type: "Note", title: "Kickoff call completed successfully", date: "Mar 28, 2026", amount: null },
 ];
@@ -103,7 +103,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
                 </div>
                 <div className="col-span-2 mt-2">
                   <p className="text-xs text-slate-500 mb-1">Total Billed</p>
-                  <p className="text-lg font-bold text-slate-800">{client.totalBilled || "$0.00"}</p>
+                  <p className="text-lg font-bold text-slate-800">{client.totalBilled || "₹0.00"}</p>
                 </div>
               </div>
             </div>
@@ -133,7 +133,7 @@ export default async function ClientProfilePage({ params }: { params: Promise<{ 
                       <div className="flex items-start gap-4">
                         <div className={`mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${item.type === "Payment" ? "bg-teal-50 text-teal-600" : item.type === "Invoice" ? "bg-violet-50 text-violet-600" : "bg-slate-100 text-slate-500"}`}>
                           {item.type === "Invoice" ? <FileText className="h-5 w-5" /> : 
-                           item.type === "Payment" ? <span className="font-bold text-lg">$</span> : 
+                           item.type === "Payment" ? <span className="font-bold text-lg">₹</span> : 
                            <Activity className="h-5 w-5" />}
                         </div>
                         <div>

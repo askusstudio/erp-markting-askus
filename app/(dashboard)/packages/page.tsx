@@ -147,7 +147,7 @@ export default function PackagesPage() {
             <p className="mt-2 text-sm text-slate-500 min-h-[40px]">{pkg.description}</p>
             
             <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
-              <span className="text-lg font-semibold text-slate-800">${pkg.default_price}</span>
+              <span className="text-lg font-semibold text-slate-800">₹{pkg.default_price}</span>
               <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-600">
                 {pkg.recurring_cadence}
               </span>
@@ -169,7 +169,7 @@ export default function PackagesPage() {
                 <input required type="text" value={newPackage.name} onChange={e => setNewPackage({...newPackage, name: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Price ($) *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Price (₹) *</label>
                 <input required type="number" step="0.01" value={newPackage.price} onChange={e => setNewPackage({...newPackage, price: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
               </div>
               <div>

@@ -164,7 +164,7 @@ export default function ClientsPage() {
                       {client.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 font-medium text-slate-800">{client.totalBilled || "$0.00"}</td>
+                  <td className="px-6 py-4 font-medium text-slate-800">{client.totalBilled || "₹0.00"}</td>
                   <td className="px-6 py-4 text-right">
                     <ActionMenu 
                       onEdit={() => handleEdit(client)} 

@@ -35,7 +35,7 @@ export default function RecurringPage() {
         client: r.clients?.name || "Unknown",
         package_id: r.package_id,
         package: r.service_packages?.name || "Custom",
-        amount: `$${r.amount}`,
+        amount: `₹${r.amount}`,
         rawAmount: r.amount,
         cadence: r.cadence,
         nextInvoice: r.next_invoice_date ? new Date(r.next_invoice_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : "Not set",
@@ -220,7 +220,7 @@ export default function RecurringPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Amount ($) *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Amount (₹) *</label>
                 <input required type="number" step="0.01" value={newRetainer.amount} onChange={e => setNewRetainer({...newRetainer, amount: e.target.value})} className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm focus:border-violet-400 focus:outline-none" />
               </div>
               <div>

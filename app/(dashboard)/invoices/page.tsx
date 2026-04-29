@@ -18,7 +18,7 @@ export default function InvoicesPage() {
   const [clients, setClients] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newInvoice, setNewInvoice] = useState({ client: "", amount: "", currency: "$", dueDate: "", clientName: "" });
+  const [newInvoice, setNewInvoice] = useState({ client: "", amount: "", currency: "₹", dueDate: "", clientName: "" });
   const [clientMode, setClientMode] = useState<"select" | "create">("select");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [timeFilter, setTimeFilter] = useState("All Time");
@@ -41,7 +41,7 @@ export default function InvoicesPage() {
         invoice_number: inv.invoice_number,
         client_id: inv.client_id,
         client: inv.clients?.name || "Unknown",
-        amount: `$${inv.total}`,
+        amount: `₹${inv.total}`,
         rawAmount: inv.total,
         date: new Date(inv.issue_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
         rawDate: inv.issue_date,
@@ -58,10 +58,10 @@ export default function InvoicesPage() {
   };
 
   const currencies = [
+    { symbol: "₹", label: "INR (₹)" },
     { symbol: "$", label: "USD ($)" },
     { symbol: "€", label: "EUR (€)" },
-    { symbol: "£", label: "GBP (£)" },
-    { symbol: "₹", label: "INR (₹)" }
+    { symbol: "£", label: "GBP (£)" }
   ];
 
   const filteredInvoices = invoices.filter(invoice => {
@@ -90,7 +90,7 @@ export default function InvoicesPage() {
       client: invoice.client_id,
       clientName: invoice.client,
       amount: invoice.rawAmount?.toString() || "",
-      currency: "$",
+      currency: "₹",
       dueDate: invoice.rawDueDate || "",
     });
     setEditingId(invoice.id);
@@ -142,7 +142,7 @@ export default function InvoicesPage() {
     }
     
     setIsModalOpen(false);
-    setNewInvoice({ client: "", clientName: "", amount: "", currency: "$", dueDate: "" });
+    setNewInvoice({ client: "", clientName: "", amount: "", currency: "₹", dueDate: "" });
     setClientMode("select");
   };
 
